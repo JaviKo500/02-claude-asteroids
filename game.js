@@ -304,7 +304,7 @@ class PowerUp {
       ctx.beginPath();
       ctx.arc(0, 0, s * 0.55, 0, Math.PI * 2);
       ctx.stroke();
-    } else {
+    } else if (this.type === 'triple') {
       // Rombo exterior cian (tiro triple)
       ctx.strokeStyle = '#3df';
       ctx.lineWidth   = 2;
@@ -326,6 +326,29 @@ class PowerUp {
       ctx.moveTo( 0, -s * 0.5);
       ctx.lineTo( 0,  s * 0.5);
       ctx.stroke();
+    } else if (this.type === 'slowmo') {
+      // Círculo exterior violeta (slow motion)
+      ctx.strokeStyle = '#a8f';
+      ctx.lineWidth   = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, s, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Manecilla larga (apunta arriba)
+      ctx.strokeStyle = '#a8f';
+      ctx.lineWidth   = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(0, -s * 0.65);
+      ctx.stroke();
+
+      // Manecilla corta (apunta a la derecha)
+      ctx.strokeStyle = 'rgba(170,136,255,0.6)';
+      ctx.lineWidth   = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(s * 0.45, 0);
+      ctx.stroke();
     }
 
     ctx.restore();
@@ -342,6 +365,8 @@ let tripleShotTimer;
 let tripleSpawned;
 let shieldTimer;
 let shieldSpawned;
+let slowmoTimer;
+let slowmoSpawned;
 
 function spawnAsteroids(count) {
   const SAFE_DIST = 130;
@@ -369,6 +394,8 @@ function initGame() {
   tripleSpawned   = false;
   shieldTimer     = 0;
   shieldSpawned   = false;
+  slowmoTimer     = 0;
+  slowmoSpawned   = false;
   spawnAsteroids(4);
 }
 
@@ -378,6 +405,7 @@ function nextLevel() {
   particles     = [];
   tripleSpawned = false;
   shieldSpawned = false;
+  slowmoSpawned = false;
   ship.reset();
   spawnAsteroids(3 + level);
 }
@@ -403,11 +431,13 @@ function maybeSpawnPowerup(x, y) {
   const available = [];
   if (!tripleSpawned) available.push('triple');
   if (!shieldSpawned) available.push('shield');
+  if (!slowmoSpawned) available.push('slowmo');
   if (available.length === 0) return;
   const type = available[randInt(0, available.length - 1)];
   powerups.push(new PowerUp(x, y, type));
   if (type === 'triple') tripleSpawned = true;
-  else shieldSpawned = true;
+  else if (type === 'shield') shieldSpawned = true;
+  else slowmoSpawned = true;
 }
 
 // ── Update ────────────────────────────────────────────────────────────────────
@@ -423,7 +453,8 @@ function update(dt) {
     deadTimer -= dt;
     particles.forEach(p => p.update(dt));
     particles = particles.filter(p => !p.dead);
-    asteroids.forEach(a => a.update(dt));
+    const astDtDead = slowmoTimer > 0 ? dt * 0.5 : dt;
+    asteroids.forEach(a => a.update(astDtDead));
     if (deadTimer <= 0) { state = 'playing'; ship.reset(); }
     return;
   }
@@ -431,6 +462,7 @@ function update(dt) {
   // Timers de power-ups
   if (tripleShotTimer > 0) tripleShotTimer -= dt;
   if (shieldTimer     > 0) shieldTimer     -= dt;
+  if (slowmoTimer     > 0) slowmoTimer     -= dt;
 
   // Disparar
   if (pressed('Space')) {
@@ -439,7 +471,8 @@ function update(dt) {
 
   ship.update(dt);
   bullets.forEach(b => b.update(dt));
-  asteroids.forEach(a => a.update(dt));
+  const astDt = slowmoTimer > 0 ? dt * 0.5 : dt;
+  asteroids.forEach(a => a.update(astDt));
   particles.forEach(p => p.update(dt));
 
   bullets   = bullets.filter(b => !b.dead);
@@ -466,11 +499,12 @@ function update(dt) {
   bullets   = bullets.filter(b => !b.dead);
 
   // Garantizar al menos un pickup por nivel
-  if (!tripleSpawned && !shieldSpawned && asteroids.length === 0) {
-    const type = Math.random() < 0.5 ? 'triple' : 'shield';
+  if (!tripleSpawned && !shieldSpawned && !slowmoSpawned && asteroids.length === 0) {
+    const type = ['triple', 'shield', 'slowmo'][randInt(0, 2)];
     powerups.push(new PowerUp(lastDestroyedX, lastDestroyedY, type));
     if (type === 'triple') tripleSpawned = true;
-    else shieldSpawned = true;
+    else if (type === 'shield') shieldSpawned = true;
+    else slowmoSpawned = true;
   }
 
   // Nave vs asteroide
@@ -497,6 +531,7 @@ function update(dt) {
     if (!p.dead && dist(ship, p) < ship.radius + p.radius) {
       p.dead = true;
       if (p.type === 'shield') shieldTimer = 5;
+      else if (p.type === 'slowmo') slowmoTimer = 6;
       else tripleShotTimer = 5;
     }
   }
@@ -549,6 +584,13 @@ function drawHUD() {
     ctx.textAlign = 'left';
     ctx.font      = '15px monospace';
     ctx.fillText(`ESCUDO  ${shieldTimer.toFixed(1)}s`, 14, 70);
+  }
+
+  if (slowmoTimer > 0) {
+    ctx.fillStyle = '#a8f';
+    ctx.textAlign = 'left';
+    ctx.font      = '15px monospace';
+    ctx.fillText(`LENTO   ${slowmoTimer.toFixed(1)}s`, 14, 92);
   }
 }
 
