@@ -140,9 +140,10 @@ class Ship {
     if (this.invincible    > 0) this.invincible    -= dt;
     if (this.shootCooldown > 0) this.shootCooldown -= dt;
 
-    const ROT   = 3.5;   // rad/s
-    const THRUST = 260;  // px/s²
-    const DRAG   = 0.987;
+    const hyper  = hyperTimer > 0;
+    const ROT    = hyper ? 3.5 * 1.4 : 3.5;   // rad/s
+    const THRUST = hyper ? 650        : 260;   // px/s²
+    const DRAG   = hyper ? 0.991      : 0.987;
 
     if (keys['ArrowLeft'])  this.angle -= ROT * dt;
     if (keys['ArrowRight']) this.angle += ROT * dt;
@@ -214,12 +215,16 @@ class Ship {
     ctx.stroke();
 
     // Llama del propulsor
-    if (this.thrusting && Math.random() > 0.35) {
+    if (this.thrusting && Math.random() > (hyperTimer > 0 ? 0.1 : 0.35)) {
+      const flameLen = hyperTimer > 0 ? rand(16, 30) : rand(6, 14);
+      const flameW   = hyperTimer > 0 ? 6 : 4;
       ctx.beginPath();
-      ctx.moveTo(-8, -4);
-      ctx.lineTo(-8 - rand(6, 14), 0);
-      ctx.lineTo(-8,  4);
-      ctx.strokeStyle = 'rgba(255, 130, 0, 0.85)';
+      ctx.moveTo(-8, -flameW);
+      ctx.lineTo(-8 - flameLen, 0);
+      ctx.lineTo(-8,  flameW);
+      ctx.strokeStyle = hyperTimer > 0
+        ? 'rgba(180, 230, 255, 0.95)'   // azul-blanco para hiper
+        : 'rgba(255, 130, 0, 0.85)';    // naranja normal
       ctx.stroke();
     }
 
@@ -373,6 +378,22 @@ class PowerUp {
       ctx.beginPath();
       ctx.arc(s * 0.85, -s * 0.85, 2.5, 0, Math.PI * 2);
       ctx.fill();
+    } else if (this.type === 'hyper') {
+      // Rayo dorado (zig-zag de relámpago relleno)
+      ctx.fillStyle   = '#fd4';
+      ctx.strokeStyle = '#fb2';
+      ctx.lineWidth   = 1;
+      ctx.lineJoin    = 'round';
+      ctx.beginPath();
+      ctx.moveTo( 2, -s);        // punta superior
+      ctx.lineTo( s * 0.6, -s * 0.1);  // vértice derecho-alto
+      ctx.lineTo( 1, -s * 0.1); // muesca central
+      ctx.lineTo(-2,  s);        // punta inferior
+      ctx.lineTo(-s * 0.6,  s * 0.1);  // vértice izquierdo-bajo
+      ctx.lineTo(-1,  s * 0.1); // muesca central
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
     }
 
     ctx.restore();
@@ -393,6 +414,8 @@ let slowmoTimer;
 let slowmoSpawned;
 let bombSpawned;
 let novaFlash;   // segundos restantes del destello visual
+let hyperTimer;
+let hyperSpawned;
 
 function spawnAsteroids(count) {
   const SAFE_DIST = 130;
@@ -424,6 +447,8 @@ function initGame() {
   slowmoSpawned   = false;
   bombSpawned     = false;
   novaFlash       = 0;
+  hyperTimer      = 0;
+  hyperSpawned    = false;
   spawnAsteroids(4);
 }
 
@@ -434,6 +459,7 @@ function nextLevel() {
   tripleSpawned = false;
   shieldSpawned = false;
   slowmoSpawned = false;
+  hyperSpawned  = false;
   if (level % 3 === 0) bombSpawned = false;
   ship.reset();
   spawnAsteroids(3 + level);
@@ -473,12 +499,14 @@ function maybeSpawnPowerup(x, y) {
   if (!tripleSpawned) available.push('triple');
   if (!shieldSpawned) available.push('shield');
   if (!slowmoSpawned) available.push('slowmo');
+  if (!hyperSpawned)  available.push('hyper');
   if (available.length === 0) return;
   const type = available[randInt(0, available.length - 1)];
   powerups.push(new PowerUp(x, y, type));
   if (type === 'triple') tripleSpawned = true;
   else if (type === 'shield') shieldSpawned = true;
-  else slowmoSpawned = true;
+  else if (type === 'slowmo') slowmoSpawned = true;
+  else hyperSpawned = true;
 }
 
 // ── Update ────────────────────────────────────────────────────────────────────
@@ -505,6 +533,7 @@ function update(dt) {
   if (shieldTimer     > 0) shieldTimer     -= dt;
   if (slowmoTimer     > 0) slowmoTimer     -= dt;
   if (novaFlash       > 0) novaFlash       -= dt;
+  if (hyperTimer      > 0) hyperTimer      -= dt;
 
   // Disparar
   if (pressed('Space')) {
@@ -541,12 +570,13 @@ function update(dt) {
   bullets   = bullets.filter(b => !b.dead);
 
   // Garantizar al menos un pickup por nivel
-  if (!tripleSpawned && !shieldSpawned && !slowmoSpawned && asteroids.length === 0) {
-    const type = ['triple', 'shield', 'slowmo'][randInt(0, 2)];
+  if (!tripleSpawned && !shieldSpawned && !slowmoSpawned && !hyperSpawned && asteroids.length === 0) {
+    const type = ['triple', 'shield', 'slowmo', 'hyper'][randInt(0, 3)];
     powerups.push(new PowerUp(lastDestroyedX, lastDestroyedY, type));
     if (type === 'triple') tripleSpawned = true;
     else if (type === 'shield') shieldSpawned = true;
-    else slowmoSpawned = true;
+    else if (type === 'slowmo') slowmoSpawned = true;
+    else hyperSpawned = true;
   }
 
   // Nave vs asteroide
@@ -575,6 +605,7 @@ function update(dt) {
       if (p.type === 'shield') shieldTimer = 5;
       else if (p.type === 'slowmo') slowmoTimer = 6;
       else if (p.type === 'bomb') novaBomb();
+      else if (p.type === 'hyper') hyperTimer = 8;
       else tripleShotTimer = 5;
     }
   }
@@ -634,6 +665,13 @@ function drawHUD() {
     ctx.textAlign = 'left';
     ctx.font      = '15px monospace';
     ctx.fillText(`LENTO   ${slowmoTimer.toFixed(1)}s`, 14, 92);
+  }
+
+  if (hyperTimer > 0) {
+    ctx.fillStyle = '#fd4';
+    ctx.textAlign = 'left';
+    ctx.font      = '15px monospace';
+    ctx.fillText(`HIPER   ${hyperTimer.toFixed(1)}s`, 14, 114);
   }
 }
 
