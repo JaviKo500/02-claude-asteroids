@@ -349,6 +349,30 @@ class PowerUp {
       ctx.moveTo(0, 0);
       ctx.lineTo(s * 0.45, 0);
       ctx.stroke();
+    } else if (this.type === 'bomb') {
+      // Cuerpo de la bomba: círculo relleno naranja
+      ctx.fillStyle   = '#f63';
+      ctx.strokeStyle = '#f84';
+      ctx.lineWidth   = 1.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, s * 0.75, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Mecha corta en diagonal (arriba-derecha)
+      ctx.strokeStyle = '#fb4';
+      ctx.lineWidth   = 2;
+      ctx.lineCap     = 'round';
+      ctx.beginPath();
+      ctx.moveTo(s * 0.45, -s * 0.45);
+      ctx.lineTo(s * 0.85, -s * 0.85);
+      ctx.stroke();
+
+      // Chispa en la punta de la mecha
+      ctx.fillStyle = '#ff0';
+      ctx.beginPath();
+      ctx.arc(s * 0.85, -s * 0.85, 2.5, 0, Math.PI * 2);
+      ctx.fill();
     }
 
     ctx.restore();
@@ -367,6 +391,8 @@ let shieldTimer;
 let shieldSpawned;
 let slowmoTimer;
 let slowmoSpawned;
+let bombSpawned;
+let novaFlash;   // segundos restantes del destello visual
 
 function spawnAsteroids(count) {
   const SAFE_DIST = 130;
@@ -396,6 +422,8 @@ function initGame() {
   shieldSpawned   = false;
   slowmoTimer     = 0;
   slowmoSpawned   = false;
+  bombSpawned     = false;
+  novaFlash       = 0;
   spawnAsteroids(4);
 }
 
@@ -406,12 +434,19 @@ function nextLevel() {
   tripleSpawned = false;
   shieldSpawned = false;
   slowmoSpawned = false;
+  if (level % 3 === 0) bombSpawned = false;
   ship.reset();
   spawnAsteroids(3 + level);
 }
 
 function explode(x, y, count = 8) {
   for (let i = 0; i < count; i++) particles.push(new Particle(x, y));
+}
+
+function novaBomb() {
+  for (const a of asteroids) explode(a.x, a.y, a.size * 5);
+  asteroids = [];
+  novaFlash = 0.35;
 }
 
 function killShip() {
@@ -427,6 +462,12 @@ function killShip() {
 }
 
 function maybeSpawnPowerup(x, y) {
+  // Bomba Nova: ítem muy escaso, roll propio (~2%), una vez por nivel
+  if (!bombSpawned && Math.random() < 0.02) {
+    powerups.push(new PowerUp(x, y, 'bomb'));
+    bombSpawned = true;
+    return;
+  }
   if (Math.random() >= 0.10) return;
   const available = [];
   if (!tripleSpawned) available.push('triple');
@@ -463,6 +504,7 @@ function update(dt) {
   if (tripleShotTimer > 0) tripleShotTimer -= dt;
   if (shieldTimer     > 0) shieldTimer     -= dt;
   if (slowmoTimer     > 0) slowmoTimer     -= dt;
+  if (novaFlash       > 0) novaFlash       -= dt;
 
   // Disparar
   if (pressed('Space')) {
@@ -532,6 +574,7 @@ function update(dt) {
       p.dead = true;
       if (p.type === 'shield') shieldTimer = 5;
       else if (p.type === 'slowmo') slowmoTimer = 6;
+      else if (p.type === 'bomb') novaBomb();
       else tripleShotTimer = 5;
     }
   }
@@ -613,6 +656,12 @@ function draw() {
   powerups.forEach(p => p.draw());
   bullets.forEach(b => b.draw());
   ship.draw();
+
+  // Nova flash: destello blanco al detonar la bomba
+  if (novaFlash > 0) {
+    ctx.fillStyle = `rgba(255,255,255,${(novaFlash / 0.35) * 0.6})`;
+    ctx.fillRect(0, 0, W, H);
+  }
 
   drawHUD();
 
