@@ -12,7 +12,7 @@ const justPressed = {};
 window.addEventListener('keydown', e => {
   justPressed[e.code] = !keys[e.code];
   keys[e.code] = true;
-  if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code))
+  if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Escape'].includes(e.code))
     e.preventDefault();
 });
 window.addEventListener('keyup', e => { keys[e.code] = false; });
@@ -404,6 +404,7 @@ class PowerUp {
 let ship, bullets, asteroids, particles;
 let score, lives, level;
 let state;      // 'playing' | 'dead' | 'gameover'
+let paused;
 let deadTimer;
 let powerups;
 let tripleShotTimer;
@@ -439,6 +440,7 @@ function initGame() {
   lives  = 3;
   level  = 1;
   state  = 'playing';
+  paused = false;
   tripleShotTimer = 0;
   tripleSpawned   = false;
   shieldTimer     = 0;
@@ -511,6 +513,9 @@ function maybeSpawnPowerup(x, y) {
 
 // ── Update ────────────────────────────────────────────────────────────────────
 function update(dt) {
+  if (pressed('Escape') && state === 'playing') paused = !paused;
+  if (paused) return;
+
   if (state === 'gameover') {
     if (pressed('Space')) initGame();
     particles.forEach(p => p.update(dt));
@@ -705,6 +710,12 @@ function draw() {
 
   if (state === 'gameover')
     drawOverlay('GAME OVER', `PUNTAJE: ${score}   —   ESPACIO PARA REINICIAR`);
+
+  if (paused) {
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(0, 0, W, H);
+    drawOverlay('PAUSA', 'ESC PARA CONTINUAR');
+  }
 }
 
 // ── Loop principal ────────────────────────────────────────────────────────────
